@@ -1,0 +1,242 @@
+---
+title: "Labs - Cindy"
+output: html_document
+---
+```{r}
+
+library(dplyr)
+```
+
+```{r}
+#import Hep C patient list
+hep_c_patients<-read_delim("Z:/hep_c_patients_first_encounter_date_and_first_hep_c_icd_code.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+
+hep_c_patients <- hep_c_patients[(hep_c_patients$EncountervsICD == TRUE),]
+
+str(hep_c_patients)
+
+#filter out non hep C patients labs
+hep_c_labs <- labs[labs$PATIENT_ID %in% hep_c_patients$PATIENT_ID,]
+str(labs)
+dim(hep_c_labs) #2,107,759 of 48,967,803 labs (4.3%) for 2485 patients
+```
+
+
+```{r}
+##CBC
+
+#Filter on "complete blood count" 
+
+##?????????CBC W/ DIFF & PLATELETS - What about this lab??? Same thing??  Other prc descriptions???
+proc_description_CBC <- subset(hep_c_labs, proc_description =="COMPLETE BLOOD COUNT")
+
+length(unique(proc_description_CBC$PATIENT_ID))  #2002 unique patients
+
+
+#sort by patient ID and then by date
+proc_description_CBC <- proc_description_CBC[(order(proc_description_CBC$PATIENT_ID, proc_description_CBC$order_dttm_ds)),]
+
+#reduce columns
+cbc <- proc_description_CBC[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
+
+#remove duplicates
+cbc <- cbc[!duplicated(cbc),] #36,009
+
+##Freq of all CBC labs
+cbc_freq <- as.data.frame(table(cbc$PATIENT_ID))  #2002 unique patients
+names(cbc_freq)[1]<-paste("PATIENT_ID")
+names(cbc_freq)[2]<-paste("Num_of_CBC_Labs")
+
+hep_c_patients <- left_join(hep_c_patients, cbc_freq)
+
+#evaluate date difference
+cbc_date_diff <- cbc  %>% group_by(PATIENT_ID) %>%
+  mutate(diffDate = difftime(order_dttm_ds, lag(order_dttm_ds,1), units = "days")) %>% ungroup()
+
+cbc_date_diff$Less_than_28_days <- ifelse(cbc_date_diff$diffDate <= 28, "TRUE", "FALSE")
+
+head(cbc_date_diff)
+
+library(zoo) #last observation carried forward but in reserve to replace NA's
+cbc_date_diff$Less_than_28_days <- na.locf(cbc_date_diff$Less_than_28_days, option = "locf", fromLast = TRUE)
+head(cbc_date_diff)
+
+## Count Freq of CBC with date difference less than 28 days ##
+less_than_28_days <- cbc_date_diff[(cbc_date_diff$Less_than_28_days == "TRUE"),]
+less_than_28_days_freq <- as.data.frame(table(less_than_28_days$PATIENT_ID)) #1434 patients
+names(less_than_28_days_freq)[1]<-paste("PATIENT_ID")
+names(less_than_28_days_freq)[2]<-paste("Num_of_CBC_Labs_less_than_28days")
+
+hep_c_patients <- left_join(hep_c_patients, less_than_28_days_freq)
+
+
+##Count consecutive labs that are less than 28 days apart
+sumTRUE <- function(x) {x[x == "TRUE"]=sequence(with(rle(x), lengths[values == "TRUE"]));x} #helper function/ rle = run length encoding
+cbc_date_diff <- less_than_28_days %>% group_by(PATIENT_ID) %>% mutate(Consec=sumTRUE(Less_than_28_days))
+                                          
+cbc_date_diff$Consec <- as.numeric(cbc_date_diff$Consec)
+consec_greater_than_4 <- cbc_date_diff[(cbc_date_diff$Consec == 4),]
+
+consec_greater_than_4_freq <- as.data.frame(table(consec_greater_than_4$PATIENT_ID))#974 patients
+names(consec_greater_than_4_freq)[1]<-paste("PATIENT_ID")
+names(consec_greater_than_4_freq)[2]<-paste("Num_of_Consec_CBC_Labs_greater_than_4")
+
+hep_c_patients <- left_join(hep_c_patients, consec_greater_than_4_freq)
+
+###look at start date of consec labs
+
+date_of_consec_4th_TRUE <- consec_greater_than_4[c("PATIENT_ID", "order_dttm_ds")]
+names(date_of_consec_4th_TRUE)[2]<-paste("Date_of_4th_Consec")
+
+hep_c_patients <- left_join(hep_c_patients, date_of_consec_4th_TRUE)
+
+hep_c_patients$DateDiff4thvsICD <- hep_c_patients$First_Date_with_Hep_C_ICD_code - hep_c_patients$Date_of_4th_Consec
+```
+
+```{r}
+
+###HIV ###
+
+#Filter on "HIV" 
+
+proc_description_HIV <- hep_c_labs[grep("HIV", hep_c_labs$proc_description), ] #5398
+proc_description_HIC <- proc_description_HIV[(order(proc_description_HIV$PATIENT_ID, proc_description_HIV$order_dttm_ds)),]
+
+length(unique(proc_description_HIV$PATIENT_ID))  #965 unique patients
+
+HIV <- proc_description_HIV[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
+HIV <- HIV[!duplicated(HIV),] #36,009
+
+
+##  Freq of HIV labs
+HIV_freq <- as.data.frame(table(HIV$PATIENT_ID))
+names(HIV_freq)[1]<-paste("PATIENT_ID")
+names(HIV_freq)[2]<-paste("Num_of_HIV_Labs")
+
+hep_c_patients <- left_join(hep_c_patients, HIV_freq)
+
+```
+
+```{r}
+### HEP B ###
+
+#Filter on "Hep B"
+component_Hep_B <- hep_c_labs[grep("HEPATITIS B", hep_c_labs$component), ] #4,494
+component_Hep_B <- component_Hep_B[(order(component_Hep_B$PATIENT_ID, component_Hep_B$order_dttm_ds)),]
+
+length(unique(component_Hep_B$PATIENT_ID))  #1175 unique patients
+
+##freq of Hep B labs
+Hep_B_freq <- as.data.frame(table(component_Hep_B$PATIENT_ID))
+names(Hep_B_freq)[1]<-paste("PATIENT_ID")
+names(Hep_B_freq)[2]<-paste("Num_of_Hep_B_Labs")
+
+hep_c_patients <- left_join(hep_c_patients, Hep_B_freq)
+
+```
+
+```{r}
+treatment_patients <- subset(hep_c_patients, !is.na(Num_of_CBC_Labs) &
+                               !is.na(Num_of_HIV_Labs) &
+                               !is.na(Num_of_Hep_B_Labs))  #706 unique patients
+
+##?????What about timing of labs ?????
+```
+
+
+########## STOP HERE ########
+
+
+```{r}
+### Hepatic Function Panel ###
+
+#Filter on "Hepatic Function Panel"
+proc_description_Hep_panel <- hep_c_labs[grep("HEPATIC FUNCTION PANEL", hep_c_labs$proc_description), ] #68,472
+
+length(unique(proc_description_Hep_panel$PATIENT_ID))  #1,146 unique patients
+
+Hep_panel_freq <- as.data.frame(table(proc_description_Hep_panel$PATIENT_ID))
+names(Hep_panel_freq)[1]<-paste("PATIENT_ID")
+names(Hep_panel_freq)[2]<-paste("Num_of_Hep_panels")
+
+```
+
+
+```{r}
+
+hep_c_patients$date_diff_EncvsICD <- hep_c_patients$First_Date_with_Hep_C_ICD_code - hep_c_patients$First_Encounter_Date
+mean(hep_c_patients$date_diff_EncvsICD)
+min(hep_c_patients$date_diff_EncvsICD)
+max(hep_c_patients$date_diff_EncvsICD)
+
+hep_c_patients[order(-hep_c_patients$date_diff_EncvsICD),]
+
+hep_c_patients_labs <- subset(hep_c_patients, !is.na(First_Hep_C_Lab_Date))
+
+hep_c_patients_labs$ICDvsLab <- ifelse(hep_c_patients_labs$First_Date_with_Hep_C_ICD_code ==  hep_c_patients_labs$First_Hep_C_Lab_Date, "Same",
+                                ifelse(hep_c_patients_labs$First_Date_with_Hep_C_ICD_code < hep_c_patients_labs$First_Hep_C_Lab_Date, 
+"First ICD Before First Lab", "First ICD After First Lab"))
+
+table(hep_c_patients_labs$ICDvsLab)
+
+subset(hep_c_patients_labs, ICDvsLab == "First ICD Before First Lab")#176
+subset(hep_c_patients_labs, ICDvsLab == "Same") #304
+first_icd_after <- subset(hep_c_patients_labs, ICDvsLab == "First ICD After First Lab")#305
+nrow(subset(first_icd_after, First_Date_with_Hep_C_ICD_code > "2014-01-01")) #205
+first_icd_after_labs <- labs[labs$PATIENT_ID %in% first_icd_after$PATIENT_ID,]
+
+```
+
+```{r}
+
+###Tests with  Hep C ##
+proc_description_hep <- hep_c_labs[grep("HEP", hep_c_labs$proc_description),] #105,827 - looks like 
+unique(proc_description_hep$proc_description)
+
+proc_description_HEPATITIS_C <- hep_c_labs[grep("HEPATITIS C", hep_c_labs$proc_description),] #2131 for all 3705 patienst- looks like 
+#codes = 1145, 5584
+unique(proc_description_HEPATITIS_C$component_id)
+
+
+component_HEP <- hep_c_labs[grep("HEP", hep_c_labs$component),] #11,862 
+
+component_HEPATITIS_C <- hep_c_labs[grep("HEPATITIS C", hep_c_labs$component),] #3549 rows for 3705 patients
+#Hep Antibody, Hep C Virus AB, Hep Panel, ACUTE
+#1147 unique Ptient ID's out of 3705 patients
+
+component_HEPATITIS_C_table <- as.data.frame(table(component_HEPATITIS_C$PATIENT_ID))
+component_HEPATITIS_C_table[order(-component_HEPATITIS_C_table$Freq),]
+component_HEPATITIS_C_table
+names(component_HEPATITIS_C_table)[1]<-paste("PATIENT_ID")
+names(component_HEPATITIS_C_table)[2]<-paste("Num_of_Hep_C_Labs")
+table(component_HEPATITIS_C_table$Num_of_Hep_C_Labs)
+
+
+
+component_HEPATITIS_C[(order(component_HEPATITIS_C$PATIENT_ID, component_HEPATITIS_C$order_dttm_ds)),]
+unique(component_HEPATITIS_C$order_value)
+component_HEPATITIS_C$proc_description <- droplevels(component_HEPATITIS_C$proc_description)
+
+
+hep_c_patients <- left_join(hep_c_patients, component_HEPATITIS_C_table)
+nrow(subset(hep_c_patients, date_diff_EncvsICD == 0 & is.na(Num_of_Hep_C_Labs)))
+nrow(subset(hep_c_patients, date_diff_EncvsICD > 0 & is.na(Num_of_Hep_C_Labs)))
+
+nrow(subset(hep_c_patients, date_diff_EncvsICD == 0 & is.na(Num_of_Hep_C_Labs))) / nrow(subset(hep_c_patients, date_diff_EncvsICD == 0))
+nrow(subset(hep_c_patients, date_diff_EncvsICD > 0 & is.na(Num_of_Hep_C_Labs)))
+nrow(subset(hep_c_patients, date_diff_EncvsICD > 0 & is.na(Num_of_Hep_C_Labs)))
+nrow(subset(hep_c_patients, date_diff_EncvsICD > 0 & is.na(Num_of_Hep_C_Labs))) / nrow(subset(hep_c_patients, date_diff_EncvsICD > 0))
+
+##first Hep C test added to patient list
+hep_c_labs_first_date <- aggregate(enc_dt_ds~PATIENT_ID,  data = component_HEPATITIS_C, min) 
+names(hep_c_labs_first_date)[names(hep_c_labs_first_date) == "enc_dt_ds"] <- "First_Hep_C_Lab_Date" #785 patients
+
+hep_c_patients <- left_join(hep_c_patients, hep_c_labs_first_date)
+sum(is.na(hep_c_patients$First_Hep_C_Lab_Date)) #2920
+
+hep_c_patients$date_diff_EncvsHepCLab <- hep_c_patients$First_Hep_C_Lab_Date - hep_c_patients$First_Encounter_Date
+
+hep_c_patients[order(-hep_c_patients$Num_of_Hep_C_Labs),]
+
+subset(hep_c_patients, Num_of_Hep_C_Labs == 4)
+```
