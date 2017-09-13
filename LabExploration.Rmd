@@ -46,10 +46,10 @@ proc_description_CBC <- proc_description_CBC[(order(proc_description_CBC$PATIENT
 #reduce columns
 cbc <- proc_description_CBC[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
 
-#remove duplicates
+#remove duplicates - each component of CBC is listed as a separate row
 cbc <- cbc[!duplicated(cbc),] #27,218
 
-##Freq of all CBC labs
+##Freq of CBC labs for each patient
 cbc_freq <- as.data.frame(table(cbc$PATIENT_ID))  #1749 unique patients
 names(cbc_freq)[1]<-paste("PATIENT_ID")
 names(cbc_freq)[2]<-paste("Num_of_CBC_Labs")
@@ -68,9 +68,9 @@ library(zoo) #last observation carried forward but in reserve to replace NA's in
 cbc_date_diff$Less_than_28_days <- na.locf(cbc_date_diff$Less_than_28_days, option = "locf", fromLast = TRUE)
 head(cbc_date_diff)
 
-## Count Freq of CBC with date difference less than 28 days ##
+## Count Freq of CBC with date difference of less than 28 days from the prior lab##
 less_than_28_days <- cbc_date_diff[(cbc_date_diff$Less_than_28_days == "TRUE"),]
-less_than_28_days_freq <- as.data.frame(table(less_than_28_days$PATIENT_ID)) #1238 patients
+less_than_28_days_freq <- as.data.frame(table(less_than_28_days$PATIENT_ID)) #1434 patients
 names(less_than_28_days_freq)[1]<-paste("PATIENT_ID")
 names(less_than_28_days_freq)[2]<-paste("Num_of_CBC_Labs_less_than_28days")
 
@@ -81,28 +81,27 @@ hep_c_patients <- left_join(hep_c_patients, less_than_28_days_freq)
 ####Won't catch the first date of consec if consec starts after a false!!!
 sumTRUE <- function(x) {x[x == "TRUE"]=sequence(with(rle(x), lengths[values == "TRUE"]));x} #helper function/ rle = run length encoding
 cbc_date_diff <- less_than_28_days %>% group_by(PATIENT_ID) %>% mutate(Consec=sumTRUE(Less_than_28_days))
-                                          
+
 cbc_date_diff$Consec <- as.numeric(cbc_date_diff$Consec)
+
+##Subsetting so it only includes patients that have at least 3 consec labs
 consec_greater_than_3 <- cbc_date_diff[(cbc_date_diff$Consec == 3),]
 
-consec_greater_than_3 <- as.data.frame(table(consec_greater_than_3$PATIENT_ID))#892 patients
+consec_greater_than_3 <- as.data.frame(table(consec_greater_than_3$PATIENT_ID))#974 patients
 names(consec_greater_than_3)[1]<-paste("PATIENT_ID")
 names(consec_greater_than_3)[2]<-paste("Num_of_Consec_CBC_Labs_greater_than_3")
-
 hep_c_patients <- left_join(hep_c_patients, consec_greater_than_3)
 
-###look at start date of consec labs
-
+###look at start date and end date of consec labs
 Date_consec_min <- aggregate(order_dttm_ds~PATIENT_ID, cbc_date_diff, min)
 names(Date_consec_min)[2]<-paste("Min_Consec_Date")
-
 Date_consec_max <- aggregate(order_dttm_ds~PATIENT_ID, cbc_date_diff, max)
 names(Date_consec_max)[2]<-paste("Max_Consec_Date")
 
 min_max_Date_consec <- inner_join(Date_consec_min, Date_consec_max)
 
+#date differece start and end dates of consec
 min_max_Date_consec$Total_Num_Days_between_min_max <- min_max_Date_consec$Max_Consec_Date - min_max_Date_consec$Min_Consec_Date
-
 hep_c_patients <- left_join(hep_c_patients, min_max_Date_consec)
 
 ```
@@ -113,15 +112,15 @@ hep_c_patients <- left_join(hep_c_patients, min_max_Date_consec)
 
 #Filter on "HIV" 
 
-proc_description_HIV <- hep_c_labs[grep("HIV", hep_c_labs$proc_description), ] #53339
-proc_description_HIV <- proc_description_HIV[(order(proc_description_HIV$PATIENT_ID, proc_description_HIV$order_dttm_ds)),]
+proc_description_HIV <- hep_c_labs[grep("HIV", hep_c_labs$proc_description), ] #5398
+proc_description_HIC <- proc_description_HIV[(order(proc_description_HIV$PATIENT_ID, proc_description_HIV$order_dttm_ds)),]
 
-length(unique(proc_description_HIV$PATIENT_ID))  #719 unique patients
+length(unique(proc_description_HIV$PATIENT_ID))  #965 unique patients
 
 HIV <- proc_description_HIV[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
-HIV <- HIV[!duplicated(HIV),] #36,009 #LO: where did this come from? I have 985
+HIV <- HIV[!duplicated(HIV),] #36,009
 
-##Evaluating when HIV test was compared to CBC labs
+##Evaluating whe HIV test was compared to CBC labs
 HIV <- left_join(HIV, min_max_Date_consec)
 HIV$HIV_First_CBC_Date_diff <- (HIV$order_dttm_ds - HIV$Min_Consec_Date)
 
@@ -166,7 +165,7 @@ names(Hep_B_freq)[2]<-paste("Num_of_Hep_B_Labs")
 
 hep_c_patients <- left_join(hep_c_patients, Hep_B_freq)
 
-##  Freq of Hep B labs that occurred during CBC conse
+##  Freq of HIV labs that occurred during CBC conse
 Hep_B_tests_during_CBC_consec <- subset(component_Hep_B, During_CBC_Consec == "TRUE")
 Hep_B_freq_CBC_consec <- as.data.frame(table(Hep_B_tests_during_CBC_consec$PATIENT_ID))
 names(Hep_B_freq_CBC_consec)[1]<-paste("PATIENT_ID")
