@@ -33,10 +33,8 @@ dim(hep_c_labs)
 
 ##?????????CBC W/ DIFF & PLATELETS - What about this lab??? Same thing??  Other prc descriptions???
 proc_description_CBC <- subset(hep_c_labs, proc_description =="COMPLETE BLOOD COUNT") #334,069 rows
-proc_description_CBCwDIFF <- subset(hep_c_labs, proc_description =="CBC W/ DIFF & PLATELETS") #148,461 rows
-proc_description_CBC <- rbind(proc_description_CBC,proc_description_CBCwDIFF)
 
-length(unique(proc_description_CBC$PATIENT_ID))  #1959 unique patients
+length(unique(proc_description_CBC$PATIENT_ID))  #1749 unique patients
 
 
 #Looking at components in CBC
@@ -49,10 +47,10 @@ proc_description_CBC <- proc_description_CBC[(order(proc_description_CBC$PATIENT
 cbc <- proc_description_CBC[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
 
 #remove duplicates - each component of CBC is listed as a separate row
-cbc <- cbc[!duplicated(cbc),] #33,152
+cbc <- cbc[!duplicated(cbc),] #27,218
 
 ##Freq of CBC labs for each patient
-cbc_freq <- as.data.frame(table(cbc$PATIENT_ID))  #1959 unique patients
+cbc_freq <- as.data.frame(table(cbc$PATIENT_ID))  #1749 unique patients
 names(cbc_freq)[1]<-paste("PATIENT_ID")
 names(cbc_freq)[2]<-paste("Num_of_CBC_Labs")
 
@@ -72,11 +70,12 @@ head(cbc_date_diff)
 
 ## Count Freq of CBC with date difference of less than 28 days from the prior lab##
 less_than_28_days <- cbc_date_diff[(cbc_date_diff$Less_than_28_days == "TRUE"),]
-less_than_28_days_freq <- as.data.frame(table(less_than_28_days$PATIENT_ID)) #1345 patients
+less_than_28_days_freq <- as.data.frame(table(less_than_28_days$PATIENT_ID)) #1434 patients
 names(less_than_28_days_freq)[1]<-paste("PATIENT_ID")
 names(less_than_28_days_freq)[2]<-paste("Num_of_CBC_Labs_less_than_28days")
 
 hep_c_patients <- left_join(hep_c_patients, less_than_28_days_freq)
+
 
 ##Count consecutive labs that are less than 28 days apart
 ####Won't catch the first date of consec if consec starts after a false!!!
@@ -88,7 +87,7 @@ cbc_date_diff$Consec <- as.numeric(cbc_date_diff$Consec)
 ##Subsetting so it only includes patients that have at least 3 consec labs
 consec_greater_than_3 <- cbc_date_diff[(cbc_date_diff$Consec == 3),]
 
-consec_greater_than_3 <- as.data.frame(table(consec_greater_than_3$PATIENT_ID))#985 patients
+consec_greater_than_3 <- as.data.frame(table(consec_greater_than_3$PATIENT_ID))#974 patients
 names(consec_greater_than_3)[1]<-paste("PATIENT_ID")
 names(consec_greater_than_3)[2]<-paste("Num_of_Consec_CBC_Labs_greater_than_3")
 hep_c_patients <- left_join(hep_c_patients, consec_greater_than_3)
@@ -113,13 +112,13 @@ hep_c_patients <- left_join(hep_c_patients, min_max_Date_consec)
 
 #Filter on "HIV" 
 
-proc_description_HIV <- hep_c_labs[grep("HIV", hep_c_labs$proc_description), ] #3339
-proc_description_HIV <- proc_description_HIV[(order(proc_description_HIV$PATIENT_ID, proc_description_HIV$order_dttm_ds)),]
+proc_description_HIV <- hep_c_labs[grep("HIV", hep_c_labs$proc_description), ] #5398
+proc_description_HIC <- proc_description_HIV[(order(proc_description_HIV$PATIENT_ID, proc_description_HIV$order_dttm_ds)),]
 
-length(unique(proc_description_HIV$PATIENT_ID))  #719 unique patients
+length(unique(proc_description_HIV$PATIENT_ID))  #965 unique patients
 
 HIV <- proc_description_HIV[c("PATIENT_ID", "ENCOUNTER_ID", "PAT_ENC_CSN_ID_DID", "proc_description", "order_dttm_ds")]
-HIV <- HIV[!duplicated(HIV),] 
+HIV <- HIV[!duplicated(HIV),] #36,009
 
 ##Evaluating whe HIV test was compared to CBC labs
 HIV <- left_join(HIV, min_max_Date_consec)
@@ -181,7 +180,7 @@ hep_c_patients <- left_join(hep_c_patients, Hep_B_freq_CBC_consec)
 ##had at least one CBC lab, HIV lab, and Hep B lab
 treatment_patients <- subset(hep_c_patients, !is.na(Num_of_CBC_Labs) &
                                !is.na(Num_of_HIV_Labs) &
-                               !is.na(Num_of_Hep_B_Labs))  #497 unique patients
+                               !is.na(Num_of_Hep_B_Labs))  #478 unique patients
 
 select_treatment_patients <- subset(hep_c_patients, !is.na(Num_of_Consec_CBC_Labs_greater_than_3) &
                                !is.na(Num_of_HIV_Labs_during_CBC_consec) &
@@ -190,44 +189,34 @@ select_treatment_patients <- subset(hep_c_patients, !is.na(Num_of_Consec_CBC_Lab
 
 ```
 
+
 ```{r}
 #Look at meds for 892 patients meeting 3 consec criteria
 
-#reduced_meds_inpt2 <- meds_inpt[c(1, 7, 8, 9, 10, 11, 12, 13)]
-#reduced_meds_outpt2 <- meds_outpt[c(1, 6, 7, 8, 9, 10, 11, 12)]
+names(meds_inpt)
+names(meds_outpt)
+reduced_meds_inpt2 <- meds_inpt[c(1, 7, 8, 9, 10, 11, 12, 13)]
+reduced_meds_outpt2 <- meds_outpt[c(1, 6, 7, 8, 9, 10, 11, 12)]
 
 #bind inpt and outpt
-#reduced_meds <- rbind(reduced_meds_inpt2, reduced_meds_outpt2)
+reduced_meds <- rbind(reduced_meds_inpt2, reduced_meds_outpt2)
+reduced_meds$Patient_ID<-as.factor(reduced_meds$Patient_ID) 
+reduced_meds$Patient_ID<-str_pad(reduced_meds$Patient_ID, 10, pad = "0")
+colnames(reduced_meds)[1] <- "PATIENT_ID"
 
 #subset meds by the 892 patients meeting 3 consec criteria
-#meds_3consec <- subset(reduced_meds, reduced_meds$PATIENT_ID %in% consec_greater_than_3$PATIENT_ID)
-
-#write to bulk storage
-#write.csv(meds_3consec, "Z:/meds_3consec.csv")
-
-#read in meds_3consec
-meds_3consec<-read_delim("Z:/meds_3consec.csv", ",", escape_double = FALSE, trim_ws = TRUE)
+meds_3consec <- subset(reduced_meds, reduced_meds$PATIENT_ID %in% consec_greater_than_3$PATIENT_ID)
 
 #need to determine if meds_3consec$Order_DT_DS is later than Patient_ID's FIRST CBC date
+meds_3consec <- left_join(meds_3consec,hep_c_patients$Min_Consec_Date)
 
 
 #look at unique med combos for the 892 patients
 meds_3consec_uniques <- unique(meds_3consec[c("Thera_class_c","Thera_class","Pharm_class_c","Pharm_class","Pharm_subclass_c","Pharm_subclass")])
 
-#write.csv(meds_3consec_uniques, "Z:/meds_3consec_uniques.csv")
-
-#also look at meds for all 2485 hep C patients
-meds_2485 <- subset(reduced_meds, reduced_meds$PATIENT_ID %in% hep_c_patients$PATIENT_ID)
-
-meds_2485_uniques <- unique(meds_2485[c("Thera_class_c","Thera_class","Pharm_class_c","Pharm_class","Pharm_subclass_c","Pharm_subclass")])
-
-#write.csv(meds_2485_uniques, "Z:/meds_2485_uniques.csv")
 
 
 ```
-
-
-
 
 
 ########## STOP HERE ########
@@ -325,4 +314,64 @@ hep_c_patients$date_diff_EncvsHepCLab <- hep_c_patients$First_Hep_C_Lab_Date - h
 hep_c_patients[order(-hep_c_patients$Num_of_Hep_C_Labs),]
 
 subset(hep_c_patients, Num_of_Hep_C_Labs == 4)
+```
+
+```{r}
+######  Meds and notes from Tanmayi  #########
+
+
+###  Hep C meds  #####
+#42 ANTIVIRALS 1337 HEP C VIRUS-NS5B POLYMERASE AND NS5A INHIB. COMBO.2690 Hepatitis C - NS5B Polymerase and NS5A Inhibitor Combinations
+#42 ANTIVIRALS 637 HEPATITIS C TREATMENT AGENTS 1821 Hepatitis C - Nucleoside Analogs
+##42 ANTIVIRALS 637 HEPATITIS C TREATMENT AGENTS 1146 Hepatitis C - Interferons (patients on HCV treatment no longer receive medications in Pharm Sub Class ID #1146 (Interferons). If a patient who  has been treated in the last 2 years shows up with just an Interferon, they are likely using it for non-HCV indications)  CK- but we don't know what is in "the last 2 years" because of date shifting
+#42 ANTIVIRALS 1307 HEP C VIRUS,NUCLEOTIDE ANALOG NS5B POLYMERASE INH 2622 Hepatitis C - Nucleos(t)ide Analog NS5B Polymerase Inhibitors
+#42 ANTIVIRALS 1193 HEPATITIS C VIRUS NS3/4A SERINE PROTEASE INHIB. 2466 Hepatitis C - NS3/4A Serine Protease Inhibitors
+#42 ANTIVIRALS 1342 HEPATITIS C VIRUS - NS5A, NS3/4A, NS5B INHIB CMB.2700 Hepatitis C- NS5A, NS3/4A  Protease and Non-Nucleo.NS5B Poly Inh. Comb
+
+###  Meds taken with Hep C meds  ####
+#Patients who are treated for HCV often require only the HCV medication for their treatment. The only medication that is sometimes used with the HCV medications listed below is ribavirin.
+#37	VITAMINS	69	VITAMIN B2 PREPARATIONS	555	Vitamins - B-2, Riboflavin and Derivatives
+
+
+#reduce columns of med table and combine with Hep C patients
+hep_c_meds_inpt <- left_join(hep_c_patients, meds_inpt)
+dim(hep_c_meds_inpt)
+head(hep_c_meds_inpt)
+
+hep_c_meds_inpt <- hep_c_meds_inpt %>%
+  filter(Pharm_subclass_c == 2690 | 
+        Pharm_subclass_c == 1821|
+        Pharm_subclass_c == 2622 |
+        Pharm_subclass_c == 2466 |
+        Pharm_subclass_c == 2700) #513
+length(unique(hep_c_meds_inpt$PATIENT_ID)) #40 unique patients
+hep_c_meds_inpt$Pharm_subclass_c <- droplevels(hep_c_meds_inpt$Pharm_subclass_c)
+as.data.frame(table(hep_c_meds_inpt$Pharm_subclass_c))
+
+hep_c_meds_inpt$Date_Diff_Diagnosis <- hep_c_meds_inpt$Order_DT_DS - hep_c_meds_inpt$First_Date_with_Hep_C_ICD_code
+mean(hep_c_meds_inpt$Date_Diff_Diagnosis)
+min(hep_c_meds_inpt$Date_Diff_Diagnosis)
+max(hep_c_meds_inpt$Date_Diff_Diagnosis)
+
+hep_c_meds_outpt <- left_join(hep_c_patients, meds_outpt)
+dim(hep_c_meds_outpt)
+
+hep_c_meds_outpt <- hep_c_meds_outpt %>%
+  filter(Pharm_subclass_c == 2690 | 
+          Pharm_subclass_c == 1821|
+         Pharm_subclass_c == 2622 |
+         Pharm_subclass_c == 2466 |
+         Pharm_subclass_c == 2700) #620
+length(unique(hep_c_meds_outpt$PATIENT_ID)) #375 unique patients
+hep_c_meds_outpt$Pharm_subclass_c <- droplevels(hep_c_meds_outpt$Pharm_subclass_c)
+hep_c_meds_outpt <- hep_c_meds_outpt[!duplicated(hep_c_meds_outpt),]
+as.data.frame(table(hep_c_meds_outpt$Pharm_subclass_c))
+as.data.frame(table(hep_c_meds_outpt$PATIENT_ID))
+subset(hep_c_meds_outpt, PATIENT_ID == "0001505485")
+
+hep_c_meds_outpt$Date_Diff_Diagnosis <- hep_c_meds_outpt$Order_DT_DS - hep_c_meds_outpt$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
+mean(hep_c_meds_outpt$Date_Diff_Diagnosis)
+min(hep_c_meds_outpt$Date_Diff_Diagnosis)
+max(hep_c_meds_outpt$Date_Diff_Diagnosis)
+
 ```
