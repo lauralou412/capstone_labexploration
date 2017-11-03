@@ -14,7 +14,9 @@ hep_c_patients<-read_delim("Z:/hep_c_patients_first_encounter_date_and_first_hep
 hep_c_patients <- hep_c_patients[(hep_c_patients$EncountervsICD == TRUE),]
 
 str(hep_c_patients)
+```
 
+```{r}
 #filter out non hep C patients labs
 hep_c_labs <- inner_join(hep_c_patients,labs)
 str(hep_c_labs)
@@ -230,12 +232,29 @@ proc_description_Hep_panel <- hep_c_labs[grep("HEPATIC FUNCTION PANEL", hep_c_la
 
 length(unique(proc_description_Hep_panel$PATIENT_ID))  #1,146 unique patients
 
+proc_description_Hep_panel$component <- droplevels(proc_description_Hep_panel$component)
+table(proc_description_Hep_panel$component)
+                #ALBUMIN    ALKALINE PHOSPHATASE              ALT (SGPT)              AST (SGOT)   BILIRUBIN, CONJUGATED        BILIRUBIN, TOTAL BILIRUBIN, UNCONJUGATED           TOTAL PROTEIN 
+                   #8559                    8559                    8559                    8559                    8559                    8559                    8559                    8559 
+
 Hep_panel_freq <- as.data.frame(table(proc_description_Hep_panel$PATIENT_ID))
 names(Hep_panel_freq)[1]<-paste("PATIENT_ID")
 names(Hep_panel_freq)[2]<-paste("Num_of_Hep_panels")
 
+subset(proc_description_Hep_panel, component == "AST (SGOT)")
+
 ```
 
+```{r}
+### Renal Function Panel ###
+
+#Filter on "Renal Function Panel"
+proc_description_Renal_panel <- hep_c_labs[grep("Renal", hep_c_labs$proc_description), ] #68,472
+
+length(unique(proc_description_Renal_panel$PATIENT_ID))  #1,146 unique patients
+
+
+```
 
 ```{r}
 
@@ -338,6 +357,8 @@ hep_c_meds_inpt <- left_join(hep_c_patients, meds_inpt)
 dim(hep_c_meds_inpt)
 head(hep_c_meds_inpt)
 
+
+##Inpatient Meds
 hep_c_meds_inpt <- hep_c_meds_inpt %>%
   filter(Pharm_subclass_c == 2690 | 
         Pharm_subclass_c == 1821|
@@ -356,6 +377,8 @@ max(hep_c_meds_inpt$Date_Diff_Diagnosis)
 hep_c_meds_outpt <- left_join(hep_c_patients, meds_outpt)
 dim(hep_c_meds_outpt)
 
+
+##Outpatient Meds
 hep_c_meds_outpt <- hep_c_meds_outpt %>%
   filter(Pharm_subclass_c == 2690 | 
           Pharm_subclass_c == 1821|
@@ -374,4 +397,71 @@ mean(hep_c_meds_outpt$Date_Diff_Diagnosis)
 min(hep_c_meds_outpt$Date_Diff_Diagnosis)
 max(hep_c_meds_outpt$Date_Diff_Diagnosis)
 
+hep_c_patients
+
+med_pt_id <- hep_c_meds_outpt %>%
+    distinct(PATIENT_ID) %>%
+  select(PATIENT_ID) #375
+         
+#HEP C         Order Date
+#2013-02-03	   2013-12-07	
+
+subset(encounters, PATIENT_ID == "0000079153" & Enc_DT_DS == "2012-07-19")
+subset(rna, PATIENT_ID == "0001131794")
+subset(hep_c_meds_outpt, PATIENT_ID == "0001131794")
 ```
+
+
+```{r}
+########  RNA Lab Data  ########
+rna_pt_id <- rna %>%
+  distinct(PATIENT_ID) %>%
+  select(PATIENT_ID) #2783
+
+
+inner_join(rna_pt_id, med_pt_id)  #190
+
+as.data.frame(table(rna$proc_desc))
+
+hep_c_rna <- inner_join(hep_c_patients, rna)
+dim(hep_c_rna)#914
+length(unique(hep_c_rna$PATIENT_ID)) #484
+
+rna_freq_table <- as.data.frame(table(hep_c_rna$PATIENT_ID))
+names(rna_freq_table)[1]<-paste("PATIENT_ID")
+names(rna_freq_table)[2]<-paste("Num_of_RNA_Labs")
+
+hep_c_rna$Date_Diff_Diagnosis <- hep_c_rna$order_dttm_ds - hep_c_rna$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
+mean(hep_c_rna$Date_Diff_Diagnosis)
+min(hep_c_rna$Date_Diff_Diagnosis)
+max(hep_c_rna$Date_Diff_Diagnosis)
+
+
+#subset RNA tests
+rna_tests_1 <- hep_c_rna[grep("RNA", hep_c_rna$proc_desc), ]  #418
+
+#sort by patient ID and then by date
+rna_tests_2 <- rna_tests_1[(order(rna_tests_1$PATIENT_ID, rna_tests_1$order_dttm_ds)),]
+
+#reduce columns
+rna_tests_3 <- rna_tests_2[c("PATIENT_ID", "order_dttm_ds", "proc_desc")]
+
+#remove duplicates 
+rna_tests_4 <- rna_tests_3[!duplicated(rna_tests_3),] 
+
+##Freq of RNA labs for each patient
+rna_tests_freq <- as.data.frame(table(rna_tests_4$PATIENT_ID))  #98 unique patients
+names(rna_tests_freq)[1]<-paste("PATIENT_ID")
+names(rna_tests_freq)[2]<-paste("Num_of_RNA_Tests")
+
+#evaluate date difference between labs
+rna_tests_date_diff <- rna_tests_4  %>% group_by(PATIENT_ID) %>%
+  mutate(diffDate = difftime(order_dttm_ds, lag(order_dttm_ds,1), units = "days")) %>% ungroup()
+
+rna_tests_date_diff$thirty_day_window <- ifelse(rna_tests_date_diff$diffDate >= 21 & rna_tests_date_diff$diffDate <= 35, "TRUE", "FALSE")
+
+library(zoo) #last observation carried forward but in reserve to replace NA's in "thirty_day_window" column
+rna_tests_date_diff$thirty_day_window <- na.locf(rna_tests_date_diff$thirty_day_window, option = "locf", fromLast = TRUE)
+head(rna_tests_date_diff)
+```
+
