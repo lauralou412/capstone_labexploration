@@ -335,6 +335,8 @@ hep_c_patients[order(-hep_c_patients$Num_of_Hep_C_Labs),]
 subset(hep_c_patients, Num_of_Hep_C_Labs == 4)
 ```
 
+
+-------------------------  New Code  ------------------------
 ```{r}
 ######  Meds and notes from Tanmayi  #########
 
@@ -351,112 +353,281 @@ subset(hep_c_patients, Num_of_Hep_C_Labs == 4)
 #Patients who are treated for HCV often require only the HCV medication for their treatment. The only medication that is sometimes used with the HCV medications listed below is ribavirin.
 #37	VITAMINS	69	VITAMIN B2 PREPARATIONS	555	Vitamins - B-2, Riboflavin and Derivatives
 
+###reduce columns of med tables and combine into one
+names(meds)
+reduced_meds_inpt <- meds_inpt[c(1:4, 6:22, 27)]
+names(reduced_meds_inpt)[4]<-paste("Enc_ADM_DT_DS")
+reduced_meds_inpt$Enc_Type <- "I"  #identify which table the med order comes from
+reduced_meds_outpt <- meds_outpt[-c(17:19)]
+names(reduced_meds_outpt)[4]<-paste("Enc_ADM_DT_DS")
+reduced_meds_outpt$Enc_Type <- "O" #identify which table the med order comes from
 
-#reduce columns of med table and combine with Hep C patients
-hep_c_meds_inpt <- left_join(hep_c_patients, meds_inpt)
-dim(hep_c_meds_inpt)
-head(hep_c_meds_inpt)
+
+meds <- rbind(reduced_meds_inpt, reduced_meds_outpt) #23,252,604 rows
 
 
-##Inpatient Meds
-hep_c_meds_inpt <- hep_c_meds_inpt %>%
+#combine with Hep C patients
+hep_c_meds <- inner_join(hep_c_patients, meds)
+dim(hep_c_meds) #1109296
+head(hep_c_meds)
+length(unique(hep_c_meds$PATIENT_ID))#2454
+
+
+##Filter on Hep C meds only
+hep_c_pts_hep_c_meds <- hep_c_meds %>%
   filter(Pharm_subclass_c == 2690 | 
         Pharm_subclass_c == 1821|
+        #Pharm_subclass_c == 1146 |
         Pharm_subclass_c == 2622 |
         Pharm_subclass_c == 2466 |
-        Pharm_subclass_c == 2700) #513
-length(unique(hep_c_meds_inpt$PATIENT_ID)) #40 unique patients
-hep_c_meds_inpt$Pharm_subclass_c <- droplevels(hep_c_meds_inpt$Pharm_subclass_c)
-as.data.frame(table(hep_c_meds_inpt$Pharm_subclass_c))
-
-hep_c_meds_inpt$Date_Diff_Diagnosis <- hep_c_meds_inpt$Order_DT_DS - hep_c_meds_inpt$First_Date_with_Hep_C_ICD_code
-mean(hep_c_meds_inpt$Date_Diff_Diagnosis)
-min(hep_c_meds_inpt$Date_Diff_Diagnosis)
-max(hep_c_meds_inpt$Date_Diff_Diagnosis)
-
-hep_c_meds_outpt <- left_join(hep_c_patients, meds_outpt)
-dim(hep_c_meds_outpt)
+        Pharm_subclass_c == 2700) #1,133
+dim(hep_c_pts_hep_c_meds)
+length(unique(hep_c_pts_hep_c_meds$PATIENT_ID)) #383 unique patients
+hep_c_pts_hep_c_meds$Pharm_subclass_c <- droplevels(hep_c_pts_hep_c_meds$Pharm_subclass_c)
+hep_c_pts_hep_c_meds$Pharm_subclass <- droplevels(hep_c_pts_hep_c_meds$Pharm_subclass)
+as.data.frame(table(hep_c_pts_hep_c_meds$Pharm_subclass_c))
 
 
-##Outpatient Meds
-hep_c_meds_outpt <- hep_c_meds_outpt %>%
-  filter(Pharm_subclass_c == 2690 | 
-          Pharm_subclass_c == 1821|
-         Pharm_subclass_c == 2622 |
-         Pharm_subclass_c == 2466 |
-         Pharm_subclass_c == 2700) #620
-length(unique(hep_c_meds_outpt$PATIENT_ID)) #375 unique patients
-hep_c_meds_outpt$Pharm_subclass_c <- droplevels(hep_c_meds_outpt$Pharm_subclass_c)
-hep_c_meds_outpt <- hep_c_meds_outpt[!duplicated(hep_c_meds_outpt),]
-as.data.frame(table(hep_c_meds_outpt$Pharm_subclass_c))
-as.data.frame(table(hep_c_meds_outpt$PATIENT_ID))
-subset(hep_c_meds_outpt, PATIENT_ID == "0001505485")
+```
+```{r}
+#############  Exploratory - Hep C meds #####
 
-hep_c_meds_outpt$Date_Diff_Diagnosis <- hep_c_meds_outpt$Order_DT_DS - hep_c_meds_outpt$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
-mean(hep_c_meds_outpt$Date_Diff_Diagnosis)
-min(hep_c_meds_outpt$Date_Diff_Diagnosis)
-max(hep_c_meds_outpt$Date_Diff_Diagnosis)
-
-hep_c_patients
-
-med_pt_id <- hep_c_meds_outpt %>%
+##Unique patient ID
+unique_hep_c_pt_id_hep_c_meds <- hep_c_pts_hep_c_meds %>%
     distinct(PATIENT_ID) %>%
-  select(PATIENT_ID) #375
-         
+  select(PATIENT_ID) #383 unique patients
+
+#Med order Freq per patient
+med_freq_per_pt <- as.data.frame(table(hep_c_pts_hep_c_meds$PATIENT_ID))
+mean(med_freq_per_pt$Freq) #2.958225
+min(med_freq_per_pt$Freq) #1
+max(med_freq_per_pt$Freq) #121
+table(med_freq_per_pt$Freq)
+
+hist(med_freq_per_pt$Freq)
+med_freq_per_pt[order(-med_freq_per_pt$Freq),]
+
+inpt_hep_c_meds <- subset(hep_c_pts_hep_c_meds, Enc_Type == "I")
+unique_ids_inpt_hep_c_meds <- as.data.frame(unique(inpt_hep_c_meds$PATIENT_ID)) #40
+names(unique_ids_inpt_hep_c_meds)[1]<-paste("PATIENT_ID")
+outpt_hep_c_meds <- subset(hep_c_pts_hep_c_meds, Enc_Type == "O")
+unique_ids_outpt_hep_c_meds <- as.data.frame(unique(outpt_hep_c_meds$PATIENT_ID)) #375
+names(unique_ids_outpt_hep_c_meds)[1]<-paste("PATIENT_ID")
+
+inner_join(unique_ids_inpt_hep_c_meds, unique_ids_outpt_hep_c_meds)
+
 #HEP C         Order Date
 #2013-02-03	   2013-12-07	
 
 subset(encounters, PATIENT_ID == "0000079153" & Enc_DT_DS == "2012-07-19")
 subset(rna, PATIENT_ID == "0001131794")
-subset(hep_c_meds_outpt, PATIENT_ID == "0001131794")
+subset(hep_c_pts_hep_c_meds, PATIENT_ID == "0001706700")
 ```
 
+```{r}
+##  Look at dates for orders  
+
+hep_c_pts_hep_c_meds[duplicated(hep_c_pts_hep_c_meds),]
+
+#Find Freq order date for Hep C
+Med_Freq_Orders <- hep_c_pts_hep_c_meds %>%
+   group_by(PATIENT_ID) %>%
+  summarize(Med_Freq_Orders =n())
+
+#Find Freq order by EncType date for Hep C
+Med_Freq_Orders_by_EncType <- hep_c_pts_hep_c_meds %>%
+   group_by(PATIENT_ID, Enc_Type) %>%
+  summarize(Med_Freq_Orders =n())
+
+Med_Freq_Orders_by_InptEncType <- subset(Med_Freq_Orders_by_EncType, Enc_Type == "I")
+names(Med_Freq_Orders_by_InptEncType)[3]<-paste("Med_Freq_InptOrders")
+Med_Freq_Orders_by_InptEncType <- Med_Freq_Orders_by_InptEncType[c(1,3)]
+Med_Freq_Orders_by_OutptEncType <- subset(Med_Freq_Orders_by_EncType, Enc_Type == "O")
+names(Med_Freq_Orders_by_OutptEncType)[3]<-paste("Med_Freq_OutptOrders")
+Med_Freq_Orders_by_OutptEncType <- Med_Freq_Orders_by_OutptEncType[c(1,3)]
+
+#Find First and Last order date for Hep C
+Med_First_Order_Date <- hep_c_pts_hep_c_meds %>%
+  group_by(PATIENT_ID) %>%
+  summarize(Med_First_Order_Date = min(Order_DT_DS))
+
+Med_Last_Order_Date <- hep_c_pts_hep_c_meds %>%
+  group_by(PATIENT_ID) %>%
+  summarize(Med_Last_Order_Date = max(Order_DT_DS))
+
+med_variable <- left_join(Med_Freq_Orders, Med_Freq_Orders_by_InptEncType)
+med_variable <- left_join(med_variable, Med_Freq_Orders_by_OutptEncType)
+med_variable <- left_join(med_variable, Med_First_Order_Date)
+med_variable <- left_join(med_variable, Med_Last_Order_Date)
+pts_med_variable <- inner_join(hep_c_patients, med_variable)
+
+pts_med_variable[is.na(pts_med_variable)] <- 0
+
+##Look at date difference
+
+pts_med_variable %>%
+  select(First_Date_with_Hep_C_ICD_code, Med_Last_Order_Date, Med_First_Order_Date)
+
+#Time difference (in days) between first Hep C icd code and hep c med order date
+pts_med_variable$Date_Diff_Diagnosis_Med <- pts_med_variable$Med_First_Order_Date - pts_med_variable$First_Date_with_Hep_C_ICD_code
+mean(pts_med_variable$Date_Diff_Diagnosis_Med) #650.705 days
+min(pts_med_variable$Date_Diff_Diagnosis_Med) #-495 days
+max(pts_med_variable$Date_Diff_Diagnosis_Med) #1770 days
+
+pts_med_variable_id <- pts_med_variable %>%
+  distinct(PATIENT_ID) %>%
+  select(PATIENT_ID) #383
+
+```
 
 ```{r}
+
+###All lab
+rna_labs_table <- labs[grep("RNA", labs$proc_description), ]  #2016
+rna_labs_table$proc_description <- droplevels(rna_labs_table$proc_description)
+table(rna_labs_table$proc_description)
+
 ########  RNA Lab Data  ########
+
+#Number of unique patients in RNA dataset
 rna_pt_id <- rna %>%
   distinct(PATIENT_ID) %>%
   select(PATIENT_ID) #2783
 
-
-inner_join(rna_pt_id, med_pt_id)  #190
-
-as.data.frame(table(rna$proc_desc))
-
+#join hep c patients and rna lab table
 hep_c_rna <- inner_join(hep_c_patients, rna)
 dim(hep_c_rna)#914
 length(unique(hep_c_rna$PATIENT_ID)) #484
+hep_c_rna_pt_id <- hep_c_rna %>%
+  distinct(PATIENT_ID) %>%
+  select(PATIENT_ID) #484
 
-rna_freq_table <- as.data.frame(table(hep_c_rna$PATIENT_ID))
-names(rna_freq_table)[1]<-paste("PATIENT_ID")
-names(rna_freq_table)[2]<-paste("Num_of_RNA_Labs")
+inner_join(hep_c_rna_pt_id, pts_med_variable_id)  #193
 
-hep_c_rna$Date_Diff_Diagnosis <- hep_c_rna$order_dttm_ds - hep_c_rna$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
-mean(hep_c_rna$Date_Diff_Diagnosis)
-min(hep_c_rna$Date_Diff_Diagnosis)
-max(hep_c_rna$Date_Diff_Diagnosis)
-
+#looking at differnt procedure data
+proc_types <- hep_c_rna[c("proc_desc", "component_id", "component_name")]
+proc_types <- proc_types[!duplicated(proc_types),]
+write.csv2(proc_types, )
+proc_types[!duplicated(proc_types$proc_code),]
+proc_types[!duplicated(proc_types$component_id),]
+proc_types[!duplicated(proc_types$component_name),]
 
 #subset RNA tests
-rna_tests_1 <- hep_c_rna[grep("RNA", hep_c_rna$proc_desc), ]  #418
+rna_tests_1 <- hep_c_rna[grep("RNA", hep_c_rna$proc_desc), ]  #430
+length(unique(rna_tests_1$PATIENT_ID)) #98
+rna_lab_only_pt_id <- rna_tests_1 %>%
+  distinct(PATIENT_ID) %>%
+  select(PATIENT_ID) #98
+inner_join(rna_lab_only_pt_id, pts_med_variable)
+```
+
+```{r}
+#Find Freq of all RNA labs for Hep C
+Freq_AllLabs <- hep_c_rna %>%
+   group_by(PATIENT_ID) %>%
+  summarize(Freq_AllLabs =n())
+
+#Find First and Last order date for Hep C
+First_AllLabs_Order_Date <- hep_c_rna %>%
+  group_by(PATIENT_ID) %>%
+  summarize(First_AllLabs_Order_Date = min(order_dttm_ds))
+
+Last_AllLabs_Order_Date <- hep_c_rna %>%
+  group_by(PATIENT_ID) %>%
+  summarize(Last_AllLabs_Order_Date = max(order_dttm_ds))
+
+#Find Freq of RNA labs for Hep C
+Freq_RNALabs <- rna_tests_1 %>%
+   group_by(PATIENT_ID) %>%
+  summarize(Freq_RNALabs =n())
+
+First_RNALabs_Order_Date <- rna_tests_1 %>%
+  group_by(PATIENT_ID) %>%
+  summarize(First_RNALabs_Order_Date = min(order_dttm_ds))
+
+Last_RNALabs_Order_Date <- rna_tests_1 %>%
+  group_by(PATIENT_ID) %>%
+  summarize(Last_RNALabs_Order_Date = max(order_dttm_ds))
+
+
+lab_variable <- left_join(Freq_AllLabs, First_AllLabs_Order_Date)
+lab_variable <- left_join(lab_variable, Last_AllLabs_Order_Date)
+lab_variable <- left_join(lab_variable, Freq_RNALabs)
+
+
+lab_variable <- left_join(lab_variable, First_RNALabs_Order_Date)
+lab_variable <- left_join(lab_variable, Last_RNALabs_Order_Date)
+pts_lab_variable <- inner_join(hep_c_patients, lab_variable)
+
+pts_lab_variable$Date_Diff_Diag_AllLab <- pts_lab_variable$First_AllLabs_Order_Date - pts_lab_variable$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
+mean(pts_lab_variable$Date_Diff_Diag_AllLab) # 399.8636 days
+min(pts_lab_variable$Date_Diff_Diag_AllLab) #-882 days
+max(pts_lab_variable$Date_Diff_Diag_AllLab) #1717 days
+
+pts_lab_variable$Date_Diff_Diag_RNALab <- pts_lab_variable$First_RNALabs_Order_Date - pts_lab_variable$First_Date_with_Hep_C_ICD_code ########  why is there such a difference between diagnosis and treatment????? is this normal???????
+mean(pts_lab_variable$Date_Diff_Diag_RNALab[!is.na(pts_lab_variable$Date_Diff_Diag_RNALab)]) # 473.2755 days
+min(pts_lab_variable$Date_Diff_Diag_RNALab[!is.na(pts_lab_variable$Date_Diff_Diag_RNALab)]) #-882 days
+max(pts_lab_variable$Date_Diff_Diag_RNALab[!is.na(pts_lab_variable$Date_Diff_Diag_RNALab)]) #1667 days
+
+```
+
+```{r}
+###Combine med and RNA lab data 
+
+pts_lab_meds_variable <- inner_join(pts_lab_variable, pts_med_variable)
+
+sum(is.na(pts_lab_meds_variable$Freq_RNALabs))#141
+
+pts_lab_meds_variable$Date_Diff_Med_AllLab <- pts_lab_meds_variable$First_AllLabs_Order_Date - pts_lab_meds_variable$Med_First_Order_Date
+mean(pts_lab_meds_variable$Date_Diff_Med_AllLab) # -40.31088 days  (postive lab was first)
+min(pts_lab_meds_variable$Date_Diff_Med_AllLab) # -1340 days
+max(pts_lab_meds_variable$Date_Diff_Med_AllLab) #1288 days
+
+pts_lab_meds_variable$Date_Diff_Med_RNALab <- pts_lab_meds_variable$First_RNALabs_Order_Date - pts_lab_meds_variable$Med_First_Order_Date
+mean(pts_lab_meds_variable$Date_Diff_Med_RNALab[!is.na(pts_lab_meds_variable$Date_Diff_Med_RNALab)]) # -46.01923 days
+min(pts_lab_meds_variable$Date_Diff_Med_RNALab[!is.na(pts_lab_meds_variable$Date_Diff_Med_RNALab)]) #-1340 days
+max(pts_lab_meds_variable$Date_Diff_Med_RNALab[!is.na(pts_lab_meds_variable$Date_Diff_Med_RNALab)]) #1018 days
+
+```
+
+```{r}
+##Combine original lab data with med/lab variables
+pts_lab_meds_labs <- inner_join(pts_lab_meds_variable, rna)
 
 #sort by patient ID and then by date
-rna_tests_2 <- rna_tests_1[(order(rna_tests_1$PATIENT_ID, rna_tests_1$order_dttm_ds)),]
+pts_lab_meds_labs_2 <- pts_lab_meds_labs[(order(rna_tests_1$PATIENT_ID, rna_tests_1$order_dttm_ds)),]
 
-#reduce columns
-rna_tests_3 <- rna_tests_2[c("PATIENT_ID", "order_dttm_ds", "proc_desc")]
+#Calcuate date difference between lab order date and first med order date
+pts_lab_meds_labs_2$Date_Diff_LabOrder_FirstMedOrder <- pts_lab_meds_labs_2$order_dttm_ds - pts_lab_meds_labs_2$Med_First_Order_Date
 
-#remove duplicates 
-rna_tests_4 <- rna_tests_3[!duplicated(rna_tests_3),] 
+pts_lab_meds_labs_3 %>%
+  select(PATIENT_ID, First_Order_Date, order_dttm_ds, Date_Diff_LabOrder_FirstMedOrder)
 
-##Freq of RNA labs for each patient
-rna_tests_freq <- as.data.frame(table(rna_tests_4$PATIENT_ID))  #98 unique patients
-names(rna_tests_freq)[1]<-paste("PATIENT_ID")
-names(rna_tests_freq)[2]<-paste("Num_of_RNA_Tests")
+#Subsetting lab oversations to ones that occurred 30 days prior or after first med treatment order date
+pts_lab_meds_labs_3 <- subset(pts_lab_meds_labs_2, Date_Diff_LabOrder_FirstMedOrder > 0)
+length(unique(pts_lab_meds_labs_3$PATIENT_ID)) #102
 
-#evaluate date difference between labs
-rna_tests_date_diff <- rna_tests_4  %>% group_by(PATIENT_ID) %>%
+#Find Freq of labs by patientID for labs that occurred 30 days prior or after first med treatment order date
+Freq_AllLabs_AfterMedOrder <- pts_lab_meds_labs_3 %>%
+   group_by(PATIENT_ID) %>%
+  summarize(Freq_AllLabs_AfterMedOrder =n())
+
+mean(Freq_AllLabs_AfterMedOrder$Freq_AllLabs_AfterMedOrder)
+hist(Freq_AllLabs_AfterMedOrder$Freq_AllLabs_AfterMedOrder)
+nrow(subset(Freq_AllLabs_AfterMedOrder,Freq_AllLabs_AfterMedOrder >4))
+table(Freq_AllLabs_AfterMedOrder$Freq_AllLabs_AfterMedOrder)
+
+pts_lab_meds_labs_4 <- inner_join(pts_lab_meds_labs_3, Freq_AllLabs_AfterMedOrder)
+
+
+#evaluate date difference between lab observation
+pts_lab_meds_labs_5 <- pts_lab_meds_labs_4  %>% group_by(PATIENT_ID) %>%
   mutate(diffDate = difftime(order_dttm_ds, lag(order_dttm_ds,1), units = "days")) %>% ungroup()
+
+pts_lab_meds_labs_5 %>%
+  filter(Freq_AllLabs_AfterMedOrder == 6) %>%
+  select(PATIENT_ID, Freq_Orders,Date_Diff_LabOrder_FirstMedOrder, diffDate, Freq_AllLabs_AfterMedOrder)
+
 
 rna_tests_date_diff$thirty_day_window <- ifelse(rna_tests_date_diff$diffDate >= 21 & rna_tests_date_diff$diffDate <= 35, "TRUE", "FALSE")
 
